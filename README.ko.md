@@ -154,6 +154,46 @@ async function writeTitle(file, title) {
 }
 </script>
 ```
+**ESM (Vite / webpack / Rollup / Browser)**
+```js
+import { createExiv2Module } from 'exiv2-wasm';
+const exiv2 = await createExiv2Module(); // wasm path auto-resolved
+...
+```
+
+**CommonJS**
+```js
+const { createExiv2Module } = require('exiv2-wasm');
+
+function fileToU8FromFs(path) {
+  const fs = require('fs');
+  return new Uint8Array(fs.readFileSync(path));
+}
+
+createExiv2Module().then((exiv2) => {
+  const u8 = fileToU8FromFs('image.jpg');
+  const meta = exiv2.read(u8);
+  console.log('Model:', meta.exif['Exif.Image.Model']);
+});
+```
+
+**CDN (unpkg / jsDelivr)**
+```js
+<script type="module">
+  import { createExiv2Module } from 'https://unpkg.com/exiv2-wasm@0.5.0/dist/index.js';
+  const exiv2 = await createExiv2Module(); // exiv2.wasm is auto-located by the wrapper
+
+  // Example: read metadata from a file input
+  const input = document.querySelector('#file');
+  input.addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    const buf = new Uint8Array(await file.arrayBuffer());
+    const meta = exiv2.read(buf);
+    console.log(meta.exif['Exif.Image.Model']);
+  });
+</script>
+<input id="file" type="file" accept="image/*">
+```
 
 **자주 쓰는 키 예시**
 - 카메라: `Exif.Image.Make`, `Exif.Image.Model`

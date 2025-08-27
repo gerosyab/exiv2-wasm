@@ -1,6 +1,6 @@
 {
     "name": "exiv2-wasm",
-    "version": "0.5",
+    "version": "0.5.0",
     "description": "Exiv2 in the browser via WebAssembly (read/write EXIF/IPTC/XMP).",
     "license": "MIT",
     "author": "tremolo5",
@@ -12,8 +12,6 @@
     "bugs": {
       "url": "https://github.com/gerosyab/exiv2-wasm/issues"
     },
-  
-    // Dual package: ESM + CJS
     "exports": {
       ".": {
         "types": "./dist/index.d.ts",
@@ -23,28 +21,16 @@
       },
       "./dist/*": "./dist/*"
     },
-  
-    // Legacy & tooling hints
     "main": "./dist/index.cjs",
     "module": "./dist/index.js",
     "types": "./dist/index.d.ts",
-  
-    // Keep tree-shaking happy
     "sideEffects": false,
-  
-    // What goes to npm
     "files": [
       "dist/*",
       "README.md",
       "README.ko.md",
       "LICENSE"
     ],
-  
-    // Public when using scoped name
-    "publishConfig": {
-      "access": "public"
-    },
-  
     "keywords": [
       "exiv2",
       "exif",
@@ -54,5 +40,5 @@
       "webassembly",
       "embind"
     ]
-  }
+}
   

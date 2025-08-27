@@ -185,7 +185,7 @@ createExiv2Module().then((exiv2) => {
 **CDN (unpkg / jsDelivr)**
 ```js
 <script type="module">
-  import { createExiv2Module } from 'https://unpkg.com/exiv2-wasm@0.5/dist/index.js';
+  import { createExiv2Module } from 'https://unpkg.com/exiv2-wasm@0.5.0/dist/index.js';
   const exiv2 = await createExiv2Module(); // exiv2.wasm is auto-located by the wrapper
 
   // Example: read metadata from a file input
@@ -198,7 +198,6 @@ createExiv2Module().then((exiv2) => {
   });
 </script>
 <input id="file" type="file" accept="image/*">
-
 ```
 
 **Common keys (examples)**
