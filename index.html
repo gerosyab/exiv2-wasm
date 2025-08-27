@@ -1,0 +1,438 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>exiv2-wasm · Read / Write image metadata</title>
+<style>
+  :root{
+    --bg:#ffffff; --fg:#0f172a; --muted:#64748b; --card:#f8fafc;
+    --primary:#2563eb; --primary-weak:#e0ecff; --ring:#93c5fd;
+    --border:#e5e7eb; --danger:#ef4444; --ok:#16a34a;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{
+    margin:0; background:var(--bg); color:var(--fg);
+    font:14px/1.6 system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,"Noto Sans",sans-serif;
+  }
+  header{
+    position:sticky; top:0; z-index:10; background:#ffffffcc;
+    backdrop-filter:saturate(150%) blur(4px);
+    border-bottom:1px solid var(--border);
+  }
+  .container{max-width:1100px; margin:0 auto; padding:20px}
+  .title{font-size:20px; font-weight:800; letter-spacing:.2px}
+  .sub{color:var(--muted)}
+  .tabs{display:flex; gap:8px; margin:16px 0}
+  .tab{
+    appearance:none; border:1px solid var(--border); background:#fff; color:var(--fg);
+    border-radius:10px; padding:10px 14px; cursor:pointer; font-weight:600;
+  }
+  .tab.active{border-color:var(--primary); outline:3px solid var(--primary-weak); color:var(--primary)}
+  .panel{display:none}
+  .panel.active{display:grid}
+  .grid{grid-template-columns:1.1fr 1fr; gap:16px}
+  .card{
+    background:var(--card); border:1px solid var(--border); border-radius:14px; padding:16px;
+    box-shadow:0 2px 10px rgba(2,6,23,.03);
+  }
+  .card h3{margin:0 0 10px 0; font-size:16px}
+  .drop{
+    position:relative; border:2px dashed var(--border); border-radius:12px; padding:18px; background:#fff;
+    display:flex; align-items:center; justify-content:center; gap:12px; text-align:center; cursor:pointer;
+  }
+  .drop:hover{border-color:var(--primary)}
+  .drop.dragover{border-color:var(--primary); background:#f5f9ff; box-shadow:0 0 0 4px var(--primary-weak) inset}
+  .drop b{color:var(--primary)}
+  input[type=file]{display:none}
+  .row{display:flex; gap:10px; align-items:center; margin-top:10px; flex-wrap:wrap}
+  .btn{
+    appearance:none; border:1px solid var(--border); background:#fff; color:var(--fg);
+    padding:8px 12px; border-radius:10px; cursor:pointer; font-weight:600;
+  }
+  .btn.primary{border-color:var(--primary); background:var(--primary); color:#fff}
+  .btn.danger{border-color:var(--danger); color:var(--danger); background:#fff}
+  .btn:focus{outline:3px solid var(--primary-weak)}
+  .hint{color:var(--muted); font-size:12px}
+  .preview{display:flex; gap:14px; align-items:flex-start; flex-wrap:wrap; margin-top:10px}
+  .thumb{
+    width:160px; aspect-ratio:1; object-fit:cover; border-radius:12px; border:1px solid var(--border); background:#fff;
+  }
+  .thumb[hidden]{display:none}
+  .kv{
+    border-collapse:collapse; width:100%; background:#fff; border:1px solid var(--border); border-radius:10px; overflow:hidden;
+  }
+  .kv th,.kv td{padding:8px 10px; border-bottom:1px solid var(--border); vertical-align:top; font-size:13px}
+  .kv th{width:34%; color:#0b1324; background:#f8fafc; text-align:left}
+  .kv tr:last-child td,.kv tr:last-child th{border-bottom:none}
+  .fields{display:flex; flex-direction:column; gap:10px; width:100%}
+  .field{
+    display:grid; grid-template-columns:150px 1fr; gap:10px; align-items:center; background:#fff; border:1px solid var(--border);
+    border-radius:10px; padding:8px;
+  }
+  .field label{font-weight:600}
+  .field .controls{display:flex; gap:8px; align-items:center}
+  .field input[type=text], .field select, .field textarea{
+    width:100%; border:1px solid var(--border); border-radius:8px; padding:8px; background:#fff; color:var(--fg); font-size:14px;
+  }
+  .field textarea{min-height:62px; resize:vertical}
+  .pill{font-size:12px; color:#0b4aa3; background:#eaf2ff; border:1px solid #d5e6ff; padding:2px 8px; border-radius:999px}
+  .form-actions{display:flex; gap:10px; justify-content:flex-end; margin-top:6px}
+  .small{font-size:12px}
+</style>
+</head>
+<body>
+<header>
+  <div class="container">
+    <div class="title">exiv2-wasm <span class="sub">Read · Write image metadata</span></div>
+    <div class="tabs">
+      <button class="tab active" data-tab="read">Read Metadata</button>
+      <button class="tab" data-tab="write">Write Metadata</button>
+    </div>
+  </div>
+</header>
+
+<main class="container">
+  <!-- READ -->
+  <section id="panel-read" class="panel grid active" data-panel="read">
+    <div class="card">
+      <h3>Load image</h3>
+      <label class="drop" id="drop-read" for="file-read">
+        <div>
+          <div><b>Click</b> to select or <b>drag & drop</b> a file</div>
+          <div class="hint">JPEG/PNG/... (works after WASM loads)</div>
+        </div>
+        <input type="file" id="file-read" accept="image/*" />
+      </label>
+      <div class="preview" id="preview-read" hidden>
+        <img id="thumb-read" class="thumb" alt="thumbnail" hidden />
+        <div class="hint" id="fileinfo-read"></div>
+      </div>
+    </div>
+    <div class="card">
+      <h3>All metadata</h3>
+      <div class="row">
+        <input id="filter-read" type="text" placeholder="Filter keys..." />
+        <span class="hint">EXIF / IPTC / XMP</span>
+      </div>
+      <div id="tables"></div>
+    </div>
+  </section>
+
+  <!-- WRITE -->
+  <section id="panel-write" class="panel grid" data-panel="write">
+    <div class="card">
+      <h3>Load image</h3>
+      <label class="drop" id="drop-write" for="file-write">
+        <div>
+          <div><b>Click</b> to select or <b>drag & drop</b> a file</div>
+          <div class="hint">Thumbnail + important fields auto-loaded</div>
+        </div>
+        <input type="file" id="file-write" accept="image/*" />
+      </label>
+      <div class="preview" id="preview-write" hidden>
+        <img id="thumb-write" class="thumb" alt="thumbnail" hidden />
+        <div class="hint" id="fileinfo-write"></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>Edit fields <span class="pill">XMP + EXIF (XP* Unicode)</span></h3>
+      <div class="fields" id="fields"></div>
+      <div class="row">
+        <button class="btn" id="add-field">+ Add field</button>
+        <span class="hint">Custom key examples: "Xmp.dc.title", "Exif.Image.Artist", "Iptc.Application2.Caption"</span>
+      </div>
+      <div class="form-actions">
+        <button class="btn primary" id="save">Save & download</button>
+      </div>
+      <div class="hint small">XP* denotes Windows-specific Unicode extension fields (e.g., Exif.Image.XPTitle/XPAuthor/XPComment).</div>
+    </div>
+  </section>
+</main>
+
+<!-- WASM module -->
+<script src="dist/exiv2.js"></script>
+<script>
+let exiv2 = null;
+createExiv2Module().then(m => { exiv2 = m; console.log('[WASM] exiv2 loaded'); });
+
+/* ---------- helpers ---------- */
+const $ = s => document.querySelector(s);
+const createEl = (t, cls) => { const el=document.createElement(t); if(cls) el.className=cls; return el; };
+const fmtBytes = n => n<1024? n+' B' : n<1048576? (n/1024).toFixed(1)+' KB' : (n/1048576).toFixed(1)+' MB';
+const untilReady = () => new Promise(res=>{
+  if(exiv2) return res();
+  const id=setInterval(()=>{ if(exiv2){ clearInterval(id); res(); } },50);
+});
+const readAsU8 = file => file.arrayBuffer().then(buf => new Uint8Array(buf));
+const setThumb = (imgEl, file) => { const url=URL.createObjectURL(file); imgEl.hidden=false; imgEl.src=url; imgEl.onload=()=>URL.revokeObjectURL(url); };
+const setFileInfo = (el,file)=> el.textContent = `${file.name} · ${file.type||'unknown'} · ${fmtBytes(file.size)}`;
+
+function makeTable(title, obj, filter=''){
+  const keys = Object.keys(obj||{}).filter(k => k.toLowerCase().includes(filter.toLowerCase())).sort();
+  const wrap = createEl('div');
+  const h = createEl('h4'); h.textContent = title; wrap.appendChild(h);
+  const table = createEl('table','kv');
+  if(keys.length===0){ const p=createEl('div','hint'); p.textContent='(no items)'; wrap.appendChild(p); return wrap; }
+  keys.forEach(k=>{
+    const tr=document.createElement('tr');
+    const th=document.createElement('th'); th.textContent=k;
+    const td=document.createElement('td'); td.textContent=obj[k];
+    tr.appendChild(th); tr.appendChild(td); table.appendChild(tr);
+  });
+  wrap.appendChild(table);
+  return wrap;
+}
+
+// XP UTF-16LE <-> UTF-8
+function utf8ToXpBytes(str){
+  const u16 = Array.from(str, c => c.codePointAt(0)).flatMap(cp=>{
+    if (cp<=0xFFFF) return [cp];
+    cp-=0x10000; return [(cp>>10)+0xD800, (cp&0x3FF)+0xDC00];
+  });
+  const out = new Uint8Array(u16.length*2 + 2);
+  for(let i=0;i<u16.length;i++){ out[i*2]=u16[i]&0xFF; out[i*2+1]=(u16[i]>>8)&0xFF; }
+  out[out.length-2]=0; out[out.length-1]=0; // null-terminated
+  return out;
+}
+function xpBytesToUtf8(u8){
+  let len=u8.length; for(let i=0;i+1<u8.length;i+=2){ if(u8[i]===0 && u8[i+1]===0){ len=i; break; } }
+  const u16=[]; for(let i=0;i+1<len;i+=2){ u16.push(u8[i] | (u8[i+1]<<8)); }
+  return String.fromCharCode(...u16);
+}
+
+/* ---------- tabs ---------- */
+document.querySelectorAll('.tab').forEach(btn=>{
+  btn.addEventListener('click',()=>{
+    document.querySelectorAll('.tab').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    const tab = btn.dataset.tab;
+    document.querySelectorAll('.panel').forEach(p=>{
+      p.classList.toggle('active', p.dataset.panel===tab);
+    });
+  });
+});
+
+/* ---------- read panel ---------- */
+let readState = { file:null, u8:null, meta:null };
+
+function hookDrop(zoneEl, inputEl, onFile){
+  zoneEl.addEventListener('click', ()=> inputEl.click());
+  inputEl.addEventListener('change', e=>{
+    const f = e.target.files && e.target.files[0]; if(f) onFile(f);
+    inputEl.value = ''; // allow same re-select
+  });
+  ['dragenter','dragover'].forEach(ev=>zoneEl.addEventListener(ev, e=>{ e.preventDefault(); e.stopPropagation(); zoneEl.classList.add('dragover'); }));
+  ['dragleave','drop'].forEach(ev=>zoneEl.addEventListener(ev, e=>{ e.preventDefault(); e.stopPropagation(); zoneEl.classList.remove('dragover'); }));
+  zoneEl.addEventListener('drop', e=>{
+    const f = e.dataTransfer.files && e.dataTransfer.files[0]; if(f) onFile(f);
+  });
+}
+
+hookDrop($('#drop-read'), $('#file-read'), async (file)=>{
+  await untilReady();
+  readState.file = file;
+  $('#preview-read').hidden=false;
+  setThumb($('#thumb-read'), file);
+  setFileInfo($('#fileinfo-read'), file);
+
+  readState.u8 = await readAsU8(file);
+  readState.meta = exiv2.read(readState.u8);
+  renderReadTables();
+});
+
+function renderReadTables(){
+  const filter = ($('#filter-read').value||'').toLowerCase();
+  const tgt = $('#tables'); tgt.innerHTML='';
+  const m = readState.meta || {};
+  const exif = toPlain(m.exif), iptc = toPlain(m.iptc), xmp = toPlain(m.xmp);
+  tgt.appendChild(makeTable('EXIF', exif, filter));
+  tgt.appendChild(makeTable('IPTC', iptc, filter));
+  tgt.appendChild(makeTable('XMP',  xmp,  filter));
+}
+
+$('#filter-read').addEventListener('input', renderReadTables);
+
+/* ---------- write panel ---------- */
+const FIELDS = [
+  { id:'make',     label:'Make',            prefer:['Exif.Image.Make'] },
+  { id:'model',    label:'Model',           prefer:['Exif.Image.Model'] },
+  { id:'speed',    label:'Shutter (ExposureTime)', prefer:['Exif.Photo.ExposureTime','Exif.Photo.ShutterSpeedValue'] },
+  { id:'fnum',     label:'Aperture (FNumber)',     prefer:['Exif.Photo.FNumber','Exif.Photo.ApertureValue'] },
+  { id:'iso',      label:'ISO',                     prefer:['Exif.Photo.ISOSpeedRatings','Exif.Photo.PhotographicSensitivity'] },
+  { id:'author',   label:'Creator/Author',          prefer:['Xmp.dc.creator','Exif.Image.XPAuthor','Exif.Image.Artist'], xp:'Exif.Image.XPAuthor', xmp:'Xmp.dc.creator', exif:'Exif.Image.Artist' },
+  { id:'title',    label:'Title',                   prefer:['Xmp.dc.title','Exif.Image.XPTitle','Exif.Image.ImageDescription'], xp:'Exif.Image.XPTitle', xmp:'Xmp.dc.title', exif:'Exif.Image.ImageDescription' },
+  { id:'comment',  label:'Comment',                 prefer:['Xmp.dc.description','Exif.Image.XPComment','Exif.Photo.UserComment'], xp:'Exif.Image.XPComment', xmp:'Xmp.dc.description', exif:'Exif.Photo.UserComment' },
+  { id:'rights',   label:'Copyright',               prefer:['Xmp.dc.rights','Exif.Image.Copyright'], xmp:'Xmp.dc.rights', exif:'Exif.Image.Copyright' },
+];
+
+let writeState = { file:null, u8:null, refs:null, customs:[] };
+
+function fieldRow(item){
+  const wrap = createEl('div','field');
+  const left = createEl('div'); left.textContent = item.label; wrap.appendChild(left);
+  const right = createEl('div','controls');
+
+  const input = document.createElement(item.multiline? 'textarea':'input');
+  if(input.tagName==='INPUT') input.type='text';
+  input.placeholder = item.placeholder || '';
+  input.dataset.id = item.id;
+  input.style.flex='1';
+
+  // XP* sync checkbox if applicable
+  let xpToggle = null;
+  if(item.xp){
+    xpToggle = createEl('label','small');
+    const cb = document.createElement('input'); cb.type='checkbox'; cb.checked = true; cb.style.marginRight='6px';
+    xpToggle.appendChild(cb);
+    xpToggle.appendChild(document.createTextNode("Sync Windows XP* Unicode fields"));
+    xpToggle.title = "Also write Windows XP* Unicode extension fields (UTF-16LE)";
+    right.appendChild(xpToggle);
+  }
+
+  right.appendChild(input);
+  wrap.appendChild(right);
+  return {wrap, input, xpToggle};
+}
+
+function customRow(one){
+  const row = createEl('div','field');
+  const left = createEl('div'); left.textContent='Custom'; row.appendChild(left);
+  const right = createEl('div','controls');
+
+  const sel = document.createElement('select');
+  ['Xmp','Exif','Iptc'].forEach(p=>{ const o=document.createElement('option'); o.value=p; o.textContent=p; sel.appendChild(o); });
+  const key = document.createElement('input'); key.type='text'; key.placeholder='Full key (e.g., Xmp.dc.subject, Exif.Image.Artist)'; key.style.flex='1';
+  const mode = document.createElement('select');
+  [{v:'text',t:'Text'}, {v:'bytes',t:'Bytes'}].forEach(p=>{ const o=document.createElement('option'); o.value=p.v; o.textContent=p.t; mode.appendChild(o); });
+  const val = document.createElement('input'); val.type='text'; val.placeholder='Value (bytes: "41 00 42 00 ...")';
+  const del = createEl('button','btn danger'); del.textContent='✕';
+
+  if(one){ sel.value=one.prefix; key.value=one.key; mode.value=one.mode; val.value=one.value||''; }
+
+  del.addEventListener('click',()=>{
+    row.remove();
+    writeState.customs = writeState.customs.filter(c=>c.row!==row);
+  });
+
+  right.appendChild(sel); right.appendChild(key); right.appendChild(mode); right.appendChild(val); right.appendChild(del);
+  row.appendChild(right);
+  writeState.customs.push({row, sel, key, mode, val});
+  return row;
+}
+
+function renderWriteFields(){
+  const host = $('#fields'); host.innerHTML='';
+  const refs = {};
+  FIELDS.forEach(fd=>{
+    const {wrap,input,xpToggle} = fieldRow(fd);
+    host.appendChild(wrap);
+    refs[fd.id] = {input, xpToggle, def:fd};
+  });
+  writeState.refs = refs;
+}
+
+function toPlain(b){
+  if (!b) return {};
+  // 이미 plain object면 그대로
+  if (Object.getPrototypeOf(b) === Object.prototype) return b;
+
+  // embind map: b.keys()와 b.get(k) 존재
+  if (typeof b.keys === 'function' && typeof b.get === 'function') {
+    const ks = b.keys();
+    const out = {};
+    if (ks && typeof ks.size === 'function' && typeof ks.get === 'function') {
+      for (let i=0;i<ks.size();i++){ const k = ks.get(i); out[k] = String(b.get(k)); }
+    } else if (ks && Symbol.iterator in Object(ks)) {
+      for (const k of ks) out[k] = String(b.get(k));
+    }
+    return out;
+  }
+  // fallback: 느슨한 복사
+  const out = {};
+  for (const k in b) try { out[k] = String(b[k]); } catch {}
+  return out;
+}
+
+hookDrop($('#drop-write'), $('#file-write'), async (file)=>{
+  await untilReady();
+  writeState.file = file;
+  writeState.u8 = await readAsU8(file);
+
+  $('#preview-write').hidden=false;
+  setThumb($('#thumb-write'), file);
+  setFileInfo($('#fileinfo-write'), file);
+
+  if(!writeState.refs) renderWriteFields();
+
+  // load initial values
+  for(const fd of FIELDS){
+    const refs = writeState.refs[fd.id];
+    let val = null;
+    for(const k of fd.prefer){
+      if(k.startsWith('Exif.Image.XP')){ // bytes
+        const u = exiv2.readTagBytes(writeState.u8, k);
+        if(u){ try{ val = xpBytesToUtf8(u); }catch{} }
+      }else{
+        const s = exiv2.readTagText(writeState.u8, k);
+        if(s) { val = s; }
+      }
+      if(val) break;
+    }
+    if(val) refs.input.value = val;
+  }
+});
+
+// add custom
+$('#add-field').addEventListener('click',()=> $('#fields').appendChild(customRow()));
+
+$('#save').addEventListener('click', async ()=>{
+  if(!writeState.u8){ alert('Select an image first.'); return; }
+  await untilReady();
+  let data = writeState.u8;
+
+  // 1) main fields
+  for(const fd of FIELDS){
+    const {input, xpToggle} = writeState.refs[fd.id];
+    const text = (input.value || '').toString();
+
+    if(fd.xmp)  { const out = exiv2.writeString(data, fd.xmp, text); if(out) data = out; }
+    if(fd.exif) { const out = exiv2.writeString(data, fd.exif, text); if(out) data = out; }
+    if(fd.xp && xpToggle && xpToggle.querySelector('input').checked){
+      const xp = utf8ToXpBytes(text);
+      const out = exiv2.writeBytes(data, fd.xp, xp); if(out) data = out;
+    }
+  }
+
+  // 2) custom fields
+  for(const c of (writeState.customs||[])){
+    const prefix = c.sel.value; let key = c.key.value.trim(); const mode = c.mode.value; const v = c.val.value.trim();
+    if(!key){ continue; }
+    if(!/^(Xmp|Exif|Iptc)\./.test(key)) key = `${prefix}.${key}`;
+    let out=null;
+    if(mode==='text'){
+      out = exiv2.writeString(data, key, v);
+    }else{
+      const parts = v.split(/[\s,]+/).filter(Boolean);
+      const arr = new Uint8Array(parts.map(s=>parseInt(s,16)));
+      out = exiv2.writeBytes(data, key, arr);
+    }
+    if(out) data = out;
+  }
+
+  // download
+  const name = (writeState.file?.name||'image').replace(/(\.\w+)?$/, '_with_meta$1');
+  const mime = writeState.file?.type || 'application/octet-stream';
+  const blob = new Blob([data], {type:mime});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a'); a.href=url; a.download=name; a.click();
+  URL.revokeObjectURL(url);
+});
+
+/* init write fields so layout exists (inputs empty, thumbnail hidden) */
+renderWriteFields();
+</script>
+</body>
+</html>

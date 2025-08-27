@@ -53,3 +53,15 @@ dkms.conf
 
 # debug information files
 *.dwo
+
+build/
+deps/
+build-*/
+CMakeCache.txt
+CMakeFiles/
+*.cmake
+*.dll
+*.exe
+*.log
+emscripten_temp_*/
+"@ | Out-File -Encoding utf8 .gitignore

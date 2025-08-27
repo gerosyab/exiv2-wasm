@@ -1,0 +1,12 @@
+[submodule "exiv2"]
+	path = exiv2
+	url = https://github.com/Exiv2/exiv2.git
+[submodule "libexpat"]
+	path = libexpat
+	url = https://github.com/libexpat/libexpat.git
+[submodule "brotli"]
+	path = brotli
+	url = https://github.com/google/brotli.git
+[submodule "inih"]
+	path = inih
+	url = https://github.com/benhoyt/inih.git
