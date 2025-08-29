@@ -1,6 +1,6 @@
 {
     "name": "exiv2-wasm",
-    "version": "0.5.0",
+    "version": "0.5.1",
     "description": "Exiv2 in the browser via WebAssembly (read/write EXIF/IPTC/XMP).",
     "license": "MIT",
     "author": "tremolo5",
@@ -12,24 +12,25 @@
     "bugs": {
       "url": "https://github.com/gerosyab/exiv2-wasm/issues"
     },
+    "main": "./dist/index.cjs",
+    "module": "./dist/index.js",
+    "types": "./dist/index.d.ts",
     "exports": {
       ".": {
         "types": "./dist/index.d.ts",
         "import": "./dist/index.js",
         "require": "./dist/index.cjs",
-        "default": "./dist/index.js"
+        "default": "./dist/index.umd.js"
       },
       "./dist/*": "./dist/*"
     },
-    "main": "./dist/index.cjs",
-    "module": "./dist/index.js",
-    "types": "./dist/index.d.ts",
+    "browser": "dist/index.umd.js",
+    "unpkg": "dist/index.umd.js",
+    "jsdelivr": "dist/index.umd.js",
+
     "sideEffects": false,
     "files": [
-      "dist/*",
-      "README.md",
-      "README.ko.md",
-      "LICENSE"
+      "dist/*"
     ],
     "keywords": [
       "exiv2",

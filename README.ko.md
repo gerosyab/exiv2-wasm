@@ -111,7 +111,7 @@ python -m http.server 8080
 
 ## JavaScript 사용 예
 
-노출 API:
+**노출 API**
 
 - `read(u8: Uint8Array) -> { exif: Object, iptc: Object, xmp: Object }`
 - `readTagText(u8, key: string) -> string | null`
@@ -119,80 +119,72 @@ python -m http.server 8080
 - `writeString(u8, key: string, value: string) -> Uint8Array`
 - `writeBytes(u8, key: string, data: Uint8Array) -> Uint8Array`
 
+**브라우저 (CDN + `<script>` 전역 함수)**
 ```html
-<script src="dist/exiv2.js"></script>
+<script src="https://unpkg.com/exiv2-wasm"></script>
 <script>
-let exiv2;
-createExiv2Module().then(m => exiv2 = m);
+  (async () => {
+    const exiv2 = await createExiv2Module();
 
-async function fileToU8(file) {
-  const buf = await file.arrayBuffer();
-  return new Uint8Array(buf);
-}
+    async function fileToU8(file) {
+      const buf = await file.arrayBuffer();
+      return new Uint8Array(buf);
+    }
 
-// 전체 메타 읽기
-async function showMeta(file) {
-  const u8 = await fileToU8(file);
-  const meta = exiv2.read(u8);     // { exif:{}, iptc:{}, xmp:{} }
-  console.log(meta.exif["Exif.Image.Model"]); // 카메라 모델
-}
-
-// 제목 쓰기(XMP) 후 다운로드
-async function writeTitle(file, title) {
-  let u8 = await fileToU8(file);
-  u8 = exiv2.writeString(u8, "Xmp.dc.title", title);
-
-  // 선택: Windows XP* 유니코드 필드(UTF-16LE) 동기화
-  // const xp = utf8ToXpBytes(title); u8 = exiv2.writeBytes(u8, "Exif.Image.XPTitle", xp);
-
-  const blob = new Blob([u8], {type: file.type || "image/jpeg"});
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(blob);
-  a.download = file.name.replace(/(\.\w+)?$/, "_with_meta$1");
-  a.click();
-  URL.revokeObjectURL(a.href);
-}
+    document.querySelector('#file').addEventListener('change', async (e) => {
+      const u8 = await fileToU8(e.target.files[0]);
+      const meta = exiv2.read(u8);
+      console.log('Camera Model:', meta.exif['Exif.Image.Model']);
+    });
+  })();
 </script>
-```
-**ESM (Vite / webpack / Rollup / Browser)**
-```js
-import { createExiv2Module } from 'exiv2-wasm';
-const exiv2 = await createExiv2Module(); // wasm path auto-resolved
-...
+<input id="file" type="file" accept="image/*">
 ```
 
-**CommonJS**
-```js
-const { createExiv2Module } = require('exiv2-wasm');
-
-function fileToU8FromFs(path) {
-  const fs = require('fs');
-  return new Uint8Array(fs.readFileSync(path));
-}
-
-createExiv2Module().then((exiv2) => {
-  const u8 = fileToU8FromFs('image.jpg');
-  const meta = exiv2.read(u8);
-  console.log('Model:', meta.exif['Exif.Image.Model']);
-});
-```
-
-**CDN (unpkg / jsDelivr)**
+**브라우저 (CDN + ESM import)**
 ```js
 <script type="module">
-  import { createExiv2Module } from 'https://unpkg.com/exiv2-wasm@0.5.0/dist/index.js';
-  const exiv2 = await createExiv2Module(); // exiv2.wasm is auto-located by the wrapper
+  import { createExiv2Module } from 'https://cdn.jsdelivr.net/npm/exiv2-wasm/+esm';
 
-  // Example: read metadata from a file input
+  const exiv2 = await createExiv2Module();
+
   const input = document.querySelector('#file');
   input.addEventListener('change', async (e) => {
     const file = e.target.files[0];
     const buf = new Uint8Array(await file.arrayBuffer());
     const meta = exiv2.read(buf);
-    console.log(meta.exif['Exif.Image.Model']);
+    console.log('Camera Model:', meta.exif['Exif.Image.Model']);
   });
 </script>
 <input id="file" type="file" accept="image/*">
+```
+
+**ESM (Node.js / Vite / webpack / Rollup)**
+```
+import { createExiv2Module } from 'exiv2-wasm';
+
+const exiv2 = await createExiv2Module();
+
+const fs = await import('fs/promises');
+const u8 = new Uint8Array(await fs.readFile('image.jpg'));
+const meta = exiv2.read(u8);
+console.log('Model:', meta.exif['Exif.Image.Model']);
+```
+
+**CommonJS**
+```js
+const { createExiv2Module } = require('exiv2-wasm');
+const fs = require('fs');
+
+function fileToU8(path) {
+  return new Uint8Array(fs.readFileSync(path));
+}
+
+createExiv2Module().then((exiv2) => {
+  const u8 = fileToU8('image.jpg');
+  const meta = exiv2.read(u8);
+  console.log('Model:', meta.exif['Exif.Image.Model']);
+});
 ```
 
 **자주 쓰는 키 예시**
