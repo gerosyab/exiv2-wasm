@@ -1,6 +1,6 @@
 {
     "name": "exiv2-wasm",
-    "version": "0.5.1",
+    "version": "0.5.11",
     "description": "Exiv2 in the browser via WebAssembly (read/write EXIF/IPTC/XMP).",
     "license": "MIT",
     "author": "tremolo5",
