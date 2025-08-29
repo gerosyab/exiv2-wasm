@@ -114,22 +114,67 @@ emcmake cmake -S "$projectRoot\exiv2" -B "$buildDir" -G Ninja `
 
 cmake --build "$buildDir" --parallel
 
-# 5) Link wrapper.cpp -> exiv2.js/wasm
-$wrapper = Join-Path $projectRoot "wrapper.cpp"
-if (-not (Test-Path $wrapper)) { throw "wrapper.cpp missing" }
+# ========== 5) Link wrapper -> dist/exiv2.js(.wasm), dist/exiv2.esm.js(.wasm) ==========
 
+$wrapper = Join-Path $projectRoot "wrapper.cpp"
+if (-not (Test-Path $wrapper)) { throw "wrapper.cpp missing at $wrapper" }
+
+$outJs      = Join-Path $distDir "exiv2.js"
+$outWasm    = Join-Path $distDir "exiv2.wasm"
+$outEsmJs   = Join-Path $distDir "exiv2.esm.js"
+$outEsmWasm = Join-Path $distDir "exiv2.esm.wasm"
+
+# 공통 인클루드/라이브러리/링크 옵션 (각 요소가 '하나의 인자'가 되도록 분리)
+$incFlags = @(
+  "-I", $buildDir,
+  "-I", (Join-Path $projectRoot "exiv2\include"),
+  "-I", $depInc
+)
+$libFlags = @(
+  "-L", (Join-Path $buildDir "lib"),
+  "-L", $depLib
+)
+$libs = @("-lexiv2","-lbrotlidec","-lbrotlicommon","-lexpat","-linireader","-linih")
+
+$common = @(
+  "-O3",
+  "-sWASM=1",
+  "-sUSE_ZLIB=1",
+  "-sALLOW_MEMORY_GROWTH=1",
+  "-sMODULARIZE=1",
+  "-sEXPORT_NAME=createExiv2Module",
+  "-sENVIRONMENT=web,worker,node",
+  "--bind"
+)
+
+# em++ 호출은 '호출 연산자 & + 스플래팅' 으로 안전하게
+# 5-1) UMD/CJS
+Write-Host "[link] em++ wrapper (UMD) -> dist/exiv2.js"
+$cmdUMD = @($wrapper) + $incFlags + $libFlags + $libs + @("-o", $outJs) + $common
 Push-Location $buildDir
-em++ -O3 "$wrapper" `
-  -I "$buildDir" -I "$projectRoot\exiv2\include" -I "$depInc" `
-  -L "$buildDir\lib" -L "$depLib" `
-  -lexiv2 -lbrotlidec -lbrotlicommon -lexpat -linireader -linih `
-  -o "$outJs" `
-  -sWASM=1 -sUSE_ZLIB=1 -sMODULARIZE=1 -sEXPORT_NAME=createExiv2Module -sALLOW_MEMORY_GROWTH=1 --bind
+& em++ @cmdUMD
 Pop-Location
 
-$outWasm = Join-Path $distDir "exiv2.wasm"
 if ((Test-Path $outJs) -and (Test-Path $outWasm)) {
   Write-Host "OK: $outJs, $outWasm generated."
 } else {
-  Write-Warning "Wrapper outputs not found in $distDir. Check link step above."
+  Write-Warning "Wrapper UMD outputs not found in $distDir. Check link step above."
+  exit 2
 }
+
+# 5-2) ESM
+Write-Host "[link] em++ wrapper (ESM) -> dist/exiv2.esm.js"
+$cmdESM = @($wrapper) + $incFlags + $libFlags + $libs + @("-o", $outEsmJs) + $common + @("-sEXPORT_ES6=1")
+Push-Location $buildDir
+& em++ @cmdESM
+Pop-Location
+
+if ((Test-Path $outEsmJs) -and (Test-Path $outEsmWasm)) {
+  Write-Host "OK: $outEsmJs, $outEsmWasm generated."
+} else {
+  Write-Warning "Wrapper ESM outputs not found in $distDir. Check link step above."
+  exit 3
+}
+
+# (선택) wasm 파일을 하나로 통일하고 싶다면:
+# Copy-Item -Force $outWasm $outEsmWasm

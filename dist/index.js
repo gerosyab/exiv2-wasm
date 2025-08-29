@@ -1,69 +1,48 @@
-// dist/index.js — Universal ESM entry (browser & Node)
-
-function urlDir(metaUrl) {
+// import ESM 전용 빌드가 있으면 그걸 우선
+async function importFactory(here) {
+    const esmUrl = new URL('./exiv2.esm.js', here).toString();
+    const umdUrl = new URL('./exiv2.js', here).toString();
+  
+    // 1) 순정 ESM 시도
+    try {
+      const m = await import(/* @vite-ignore */ esmUrl);
+      const fn = m?.default || m?.createExiv2Module;
+      if (typeof fn === 'function') return fn;
+    } catch (_) {}
+  
+    // 2) UMD를 dynamic import 하면 네임스페이스가 오기도 해서 보장 어려움 → 전역 폴백
+    if (typeof window !== 'undefined' && typeof document !== 'undefined') {
+      await new Promise((res, rej) => {
+        const s = document.createElement('script');
+        s.src = umdUrl;
+        s.async = true;
+        s.onload = res;
+        s.onerror = () => rej(new Error('[exiv2-wasm] failed to load ' + umdUrl));
+        document.head.appendChild(s);
+      });
+      if (typeof globalThis.createExiv2Module === 'function') return globalThis.createExiv2Module;
+    }
+  
+    // 3) Node ESM에서 UMD require될 때는 CJS 엔트리 사용 권장
+    throw new Error('[exiv2-wasm] cannot resolve exiv2 factory (ESM).');
+  }
+  
+  function urlDir(metaUrl) {
     const u = new URL(metaUrl);
     u.pathname = u.pathname.replace(/[^/]+$/, '');
     u.search = ''; u.hash = '';
     return u.toString();
   }
   
-  async function importFactoryESM(exiv2JsUrl) {
-    try {
-      const mod = await import(/* @vite-ignore */ exiv2JsUrl);
-      const cand = [mod?.default, mod?.Module, mod];
-      const fn = cand.find((c) => typeof c === 'function');
-      return fn || null;
-    } catch {
-      return null;
-    }
-  }
-  
-  function injectClassicScript(srcUrl) {
-    return new Promise((resolve, reject) => {
-      const s = document.createElement('script');
-      s.src = srcUrl;
-      s.async = true;
-      s.onload = () => resolve();
-      s.onerror = () => reject(new Error('[exiv2-wasm] Script load failed: ' + srcUrl));
-      document.head.appendChild(s);
-    });
-  }
-  
-  function findGlobalFactory() {
-    const names = ['Exiv2Factory', 'Exiv2Module', 'Module'];
-    for (const n of names) {
-      const v = globalThis && globalThis[n];
-      if (typeof v === 'function') return v;
-    }
-    return null;
-  }
-  
   export async function createExiv2Module(options = {}) {
-    const isBrowser = typeof window !== 'undefined' && typeof document !== 'undefined';
-    const here = urlDir(import.meta.url); // .../dist/
-    const exiv2Js = new URL('./exiv2.js', here).toString();
-    const wasmUrlDefault = new URL('./exiv2.wasm', here).toString();
+    const here = urlDir(import.meta.url);
   
     const userLocate = options?.locateFile;
-    const locateFile = (p) =>
-      typeof userLocate === 'function'
+    const locateFile = (p) => (typeof userLocate === 'function'
         ? userLocate(p)
-        : (p.endsWith('.wasm') ? wasmUrlDefault : p);
+        : (p.endsWith('.wasm') ? new URL(p, here).toString() : p));
   
-    if (!isBrowser) {
-      // Node ESM
-      const fn = await importFactoryESM(exiv2Js);
-      if (!fn) throw new Error('[exiv2-wasm] Could not import exiv2.js in Node ESM.');
-      return fn({ ...options, locateFile });
-    }
-  
-    // Browser: try ESM then classic-script fallback
-    let factory = await importFactoryESM(exiv2Js);
-    if (!factory) {
-      await injectClassicScript(exiv2Js);
-      factory = findGlobalFactory();
-    }
-    if (!factory) throw new Error('[exiv2-wasm] Failed to resolve Emscripten factory from exiv2.js.');
+    const factory = await importFactory(here);
     return factory({ ...options, locateFile });
   }
   

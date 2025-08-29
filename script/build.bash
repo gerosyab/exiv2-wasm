@@ -167,24 +167,66 @@ emcmake cmake -S "${PROJECT_ROOT}/exiv2" -B "${BUILD_DIR}" -G Ninja \
 msg "[exiv2] build"
 cmake --build "${BUILD_DIR}" --parallel
 
-# ========== 5) Link wrapper -> dist/exiv2.js/.wasm ==========
+# ========== 5) Link wrapper -> dist/exiv2.js(.wasm), dist/exiv2.esm.js(.wasm) ==========
 WRAPPER="${PROJECT_ROOT}/wrapper.cpp"
 [[ -f "${WRAPPER}" ]] || { echo "error: wrapper.cpp missing at ${WRAPPER}"; exit 1; }
 
-msg "[link] em++ wrapper -> dist"
-em++ -O3 "${WRAPPER}" \
-  -I "${BUILD_DIR}" -I "${PROJECT_ROOT}/exiv2/include" -I "${DEPS_INC}" \
-  -L "${BUILD_DIR}/lib" -L "${DEPS_LIB}" \
-  -lexiv2 -lbrotlidec -lbrotlicommon -lexpat -linireader -linih \
-  -o "${DIST_DIR}/exiv2.js" \
-  -sWASM=1 -sUSE_ZLIB=1 \
-  -sMODULARIZE=1 -sEXPORT_NAME=createExiv2Module \
-  -sALLOW_MEMORY_GROWTH=1 \
-  --bind
+# 공통 include/lib/옵션
+INCLUDES=(-I "${BUILD_DIR}" -I "${PROJECT_ROOT}/exiv2/include" -I "${DEPS_INC}")
+LIBDIRS=(-L "${BUILD_DIR}/lib" -L "${DEPS_LIB}")
+LIBS=(-lexiv2 -lbrotlidec -lbrotlicommon -lexpat -linireader -linih)
 
-if [[ -f "${DIST_DIR}/exiv2.js" && -f "${DIST_DIR}/exiv2.wasm" ]]; then
-  ok "OK: ${DIST_DIR}/exiv2.js, ${DIST_DIR}/exiv2.wasm generated."
-else
-  warn "Wrapper outputs not found in ${DIST_DIR}. Check link step logs."
-  exit 2
-fi
+COMMON_FLAGS=(
+  -O3
+  -sWASM=1
+  -sUSE_ZLIB=1
+  -sALLOW_MEMORY_GROWTH=1
+  -sMODULARIZE=1
+  -sEXPORT_NAME=createExiv2Module
+  -sENVIRONMENT=web,worker,node
+  --bind
+)
+
+# ========== 5) Link wrapper -> dist/exiv2.js(.wasm), dist/exiv2.esm.js(.wasm) ==========
+WRAPPER="${PROJECT_ROOT}/wrapper.cpp"
+[[ -f "${WRAPPER}" ]] || { echo "error: wrapper.cpp missing at ${WRAPPER}"; exit 1; }
+
+INCLUDES=(-I "${BUILD_DIR}" -I "${PROJECT_ROOT}/exiv2/include" -I "${DEPS_INC}")
+LIBDIRS=(-L "${BUILD_DIR}/lib" -L "${DEPS_LIB}")
+LIBS=(-lexiv2 -lbrotlidec -lbrotlicommon -lexpat -linireader -linih)
+COMMON_FLAGS=(
+  -O3
+  -sWASM=1
+  -sUSE_ZLIB=1
+  -sALLOW_MEMORY_GROWTH=1
+  -sMODULARIZE=1
+  -sEXPORT_NAME=createExiv2Module
+  -sENVIRONMENT=web,worker,node
+  --bind
+)
+
+# 5-1) UMD
+msg "[link] em++ wrapper (UMD) -> dist/exiv2.js"
+em++ "${WRAPPER}" \
+  "${INCLUDES[@]}" "${LIBDIRS[@]}" "${LIBS[@]}" \
+  -o "${DIST_DIR}/exiv2.js" \
+  "${COMMON_FLAGS[@]}"
+
+[[ -f "${DIST_DIR}/exiv2.js" && -f "${DIST_DIR}/exiv2.wasm" ]] \
+  && ok "OK: ${DIST_DIR}/exiv2.js, ${DIST_DIR}/exiv2.wasm generated." \
+  || { warn "Wrapper UMD outputs not found in ${DIST_DIR}"; exit 2; }
+
+# 5-2) ESM
+msg "[link] em++ wrapper (ESM) -> dist/exiv2.esm.js"
+em++ "${WRAPPER}" \
+  "${INCLUDES[@]}" "${LIBDIRS[@]}" "${LIBS[@]}" \
+  -o "${DIST_DIR}/exiv2.esm.js" \
+  "${COMMON_FLAGS[@]}" \
+  -sEXPORT_ES6=1
+
+[[ -f "${DIST_DIR}/exiv2.esm.js" && -f "${DIST_DIR}/exiv2.esm.wasm" ]] \
+  && ok "OK: ${DIST_DIR}/exiv2.esm.js, ${DIST_DIR}/exiv2.esm.wasm generated." \
+  || { warn "Wrapper ESM outputs not found in ${DIST_DIR}"; exit 3; }
+
+# (선택) wasm 파일 통일:
+# cp -f "${DIST_DIR}/exiv2.wasm" "${DIST_DIR}/exiv2.esm.wasm"
